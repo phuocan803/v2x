@@ -1,69 +1,90 @@
-# Hệ thống mô phỏng và huấn luyện phân bổ tài nguyên V2X dùng GNN + DRL
 
-## Kiến trúc
 
-- Mỗi xe (V2V agent) chạy trong 1 container độc lập.
-- Sử dụng Kubernetes để scale số lượng xe.
-- Dữ liệu state-action-reward của từng xe được gom lại để huấn luyện tập trung.
+## 1. Kiến trúc 
 
-## Thư mục
+- Mỗi xe (agent) chạy trong một container độc lập.
+- Có thể scale số lượng xe dễ dàng với Kubernetes.
+- Dữ liệu state, action, reward của từng xe được lưu riêng, sau đó gom lại để huấn luyện tập trung.
 
-- `src/`: Code Python chính (mô phỏng, gom dữ liệu, train).
-- `docker/`: Dockerfile.
-- `k8s/`: File YAML cho Kubernetes.
-- `scripts/`: Script hỗ trợ.
-
-## Hướng dẫn
+## 2. Cấu trúc thư mục
 
 ```
-no Docker flow: main -> aggregate -> train
+src/
+  ├── main.py           # Mô phỏng cho 1 agent (xe)
+  ├── agent.py          # Định nghĩa agent và logic chọn hành động
+  ├── Environment.py    # Mô phỏng môi trường
+  ├── aggregate.py      # Gom dữ liệu từ nhiều xe
+  ├── train.py          # Huấn luyện offline từ dữ liệu gom
+  ├── data/
+  │     ├── all_data.pkl
+  │     ├── all_data.csv
+  │     └── convert.py  # Chuyển đổi dữ liệu sang CSV
+k8s/
+  ├── v2v-deployment.yaml   # Triển khai nhiều agent trên Kubernetes
+  └── v2v-data-pvc.yaml     # PersistentVolumeClaim cho lưu trữ dữ liệu
+requirements.txt
 ```
 
+---
 
-### 1. Build Docker image
+## 3. Hướng dẫn 
+
+### Cài đặt 
 
 ```bash
-cd docker
-docker build -t quocanuit/v2v-agent:latest .
+pip install -r src/requirements.txt
+```
 
+### Chạy mô phỏng cho 1 agent (xe)
+
+```bash
+python src/main.py
+```
+- Có thể đặt biến môi trường `VEHICLE_ID` và `OUTPUT_DIR` để tùy chỉnh.
+
+### Gom dữ liệu từ nhiều agent
+
+```bash
+python src/aggregate.py --input_dir src/data --output_file src/data/all_data.pkl
+```
+
+### Chuyển đổi dữ liệu sang CSV
+
+```bash
+python src/data/convert.py
+```
+
+### Huấn luyện offline từ dữ liệu gom
+
+```bash
+python src/train.py --data_file src/data/all_data.pkl
+```
+
+---
+
+## 4. Triển khai phân tán với Kubernetes
+
+### Build Docker image (nếu cần)
+
+```bash
+docker build -t quocanuit/v2v-agent:latest .
 docker push quocanuit/v2v-agent:latest
 ```
 
-### 2. Deploy lên Kubernetes
+### Deploy lên Kubernetes
 
 ```bash
 kubectl apply -f k8s/v2v-data-pvc.yaml
 kubectl apply -f k8s/v2v-deployment.yaml
 ```
+- Sửa trường `replicas` trong `v2v-deployment.yaml` để thay đổi số lượng xe.
 
-- Sửa `replicas` trong `v2v-deployment.yaml` để scale số lượng xe.
-
-### 3. Thu thập dữ liệu
-
-- Dữ liệu của từng xe sẽ được lưu trong PVC `/data` (mỗi file: `vehicle_{id}_data.pkl`).
-- Sau khi chạy xong, copy dữ liệu về máy local:
+### Thu thập dữ liệu từ PVC
 
 ```bash
 kubectl cp <pod-name>:/data ./data
 ```
+- Dữ liệu của từng xe sẽ được lưu trong PVC `/data` (mỗi file: `vehicle_{id}_data.pkl`).
 
-### 4. Gom dữ liệu
+---
 
-```bash
-python src/aggregate.py --input_dir ./data --output_file ./all_data.pkl
-```
-
-### 5. Train tập trung
-
-```bash
-python src/train_multi.py --data_file ./all_data.pkl
-```
-
-## Ghi chú
-
-- Có thể chỉnh sửa code trong `src/` để thay đổi logic mô phỏng hoặc huấn luyện.
-- Đảm bảo các file không cần thiết đã được xóa khỏi repo.
-
-## Liên hệ
-
-- Liên hệ nhóm phát triển để được hỗ trợ thêm.
