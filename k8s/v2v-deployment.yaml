@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: v2v-agent
+spec:
+  replicas: 2 # Số lượng xe (có thể scale)
+  selector:
+    matchLabels:
+      app: v2v-agent
+  template:
+    metadata:
+      labels:
+        app: v2v-agent
+    spec:
+      containers:
+      - name: v2v-agent
+        image: quocanuit/v2v-agent:latest
+        env:
+        - name: VEHICLE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OUTPUT_DIR
+          value: /data
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: v2v-data-pvc
